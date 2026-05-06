@@ -1,3 +1,10 @@
+
+>
+> THIS REPO IS STILL UNDER CONSTRUCTION
+>
+> IT IS NOT IN A WORKING STATE
+>
+
 # Firefox Piper TTS
 
 A Firefox extension that adds [Piper](https://github.com/OHF-Voice/piper1-gpl) text-to-speech voices to Firefox's native Reader View.

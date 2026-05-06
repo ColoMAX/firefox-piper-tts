@@ -3,10 +3,8 @@
   "name": "Firefox Piper TTS",
   "version": "1.0.0",
   "description": "Add Piper TTS voices to Firefox Reader View",
-  "minimum_firefox_version": "121",
   "permissions": [
-    "storage",
-    "webRequest"
+    "storage"
   ],
   "background": {
     "scripts": ["src/service-worker.js"]

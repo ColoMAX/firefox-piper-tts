@@ -5,92 +5,53 @@
  * and manages download/cache via IndexedDB
  */
 
+console.log('[Piper TTS] Background script started');
+
 const PIPER_VOICES_URL = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/voices.json';
 const MODEL_CACHE_DB = 'piper-models';
 const MODEL_CACHE_STORE = 'voices';
 
-// Initialize IndexedDB for model caching
-async function initDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(MODEL_CACHE_DB, 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains(MODEL_CACHE_STORE)) {
-        db.createObjectStore(MODEL_CACHE_STORE, { keyPath: 'name' });
-      }
-    };
-  });
-}
+let voicesCache = null;
 
 // Fetch available voices from Piper server
 async function fetchAvailableVoices() {
+  console.log('[Piper TTS] Fetching voices from:', PIPER_VOICES_URL);
+  
+  // Return cached if available
+  if (voicesCache) {
+    console.log('[Piper TTS] Returning cached voices');
+    return voicesCache;
+  }
+  
   try {
     const response = await fetch(PIPER_VOICES_URL);
-    return await response.json();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    voicesCache = await response.json();
+    console.log('[Piper TTS] Successfully fetched', Object.keys(voicesCache).length, 'voices');
+    return voicesCache;
   } catch (error) {
-    console.error('Failed to fetch Piper voices:', error);
+    console.error('[Piper TTS] Failed to fetch Piper voices:', error);
     return {};
   }
 }
 
-// Get cached voice model
-async function getCachedVoice(voiceName) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([MODEL_CACHE_STORE], 'readonly');
-    const store = transaction.objectStore(MODEL_CACHE_STORE);
-    const request = store.get(voiceName);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
-}
-
-// Cache voice model
-async function cacheVoice(voiceName, modelData) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([MODEL_CACHE_STORE], 'readwrite');
-    const store = transaction.objectStore(MODEL_CACHE_STORE);
-    const request = store.put({
-      name: voiceName,
-      data: modelData,
-      cached_at: new Date().toISOString()
-    });
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve();
-  });
-}
-
 // Handle messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('[Piper TTS] Background received message:', message.type);
+  
   if (message.type === 'GET_AVAILABLE_VOICES') {
     fetchAvailableVoices().then(voices => {
+      console.log('[Piper TTS] Responding with', Object.keys(voices).length, 'voices');
       sendResponse({ voices });
+    }).catch(error => {
+      console.error('[Piper TTS] Error fetching voices:', error);
+      sendResponse({ voices: {} });
     });
     return true; // Keep channel open for async response
   }
-  
-  if (message.type === 'GET_VOICE_MODEL') {
-    const { voiceName } = message;
-    
-    (async () => {
-      // Check cache first
-      const cached = await getCachedVoice(voiceName);
-      if (cached) {
-        sendResponse({ model: cached.data, cached: true });
-        return;
-      }
-      
-      // If not cached, Piper.download_voices will handle it in the worker
-      sendResponse({ model: null, cached: false });
-    })();
-    
-    return true;
-  }
 });
+
+console.log('[Piper TTS] Background script ready');
